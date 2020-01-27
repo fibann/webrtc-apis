@@ -1,4 +1,7 @@
 
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+#define _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS
+
 #ifdef _WIN32
 #include <WinSock2.h>
 #include <unknwn.h>
@@ -47,7 +50,11 @@
 #include <winrt/windows.devices.enumeration.h>
 #include <winrt/windows.system.profile.h>
 
+#include <winrt/windows.graphics.holographic.h>
+#include <winrt/windows.storage.h>
+
 #include <mfapi.h>
+#include <codecvt>
 
 using zsLib::String;
 using zsLib::Time;
@@ -1151,6 +1158,42 @@ class VideoCapturer::I420BufferPool {
   {
     RTC_LOG(LS_INFO) << "Using local detection for orientation source";
     display_orientation_ = std::make_shared<DisplayOrientation>(this);
+
+        auto current = winrt::Windows::Storage::ApplicationData::Current();
+    auto ppath = current.LocalFolder().Path();
+    std::wstring wpath(ppath.begin(), ppath.end());
+
+    // ComPtr<ABI::Windows::Storage::IStorageFile> compressed_file_out;
+    // ComPtr<ABI::Windows::Storage::IStorageFile> uncompressed_file_out;
+    // ComPtr<ABI::Windows::Foundation::IAsyncOperation<ABI::Windows::Storage::StorageFile*>>
+    //    compressed_file_op;
+    // ComPtr<ABI::Windows::Foundation::IAsyncOperation<
+    //    ABI::Windows::Storage::StorageFile*>>
+    //    uncompressed_file_op;
+
+    // ON_SUCCEEDED(folder->CreateFileAsync(
+    //    Microsoft::WRL::Wrappers::HStringReference(L"compressed.dat").Get(),
+    //    ABI::Windows::Storage::CreationCollisionOption_ReplaceExisting,
+    //    &compressed_file_op));
+    // ON_SUCCEEDED(folder->CreateFileAsync(
+    //    Microsoft::WRL::Wrappers::HStringReference(L"uncompressed.dat").Get(),
+    //    ABI::Windows::Storage::CreationCollisionOption_ReplaceExisting,
+    //    &uncompressed_file_op));
+    // compressed_file_op->GetResults(&compressed_file_out);
+    // uncompressed_file_op->GetResults(&uncompressed_file_out);
+    using convert_type = std::codecvt_utf8<wchar_t>;
+    std::wstring_convert<convert_type, wchar_t> converter;
+
+    // use converter (.to_bytes: wstr->str, .from_bytes: str->wstr)
+    std::string folderNameA = converter.to_bytes(wpath);
+
+    //compressed_file_out_.open(folderNameA + "\\compressed.dat",
+    //                          std::ifstream::binary);
+    uncompressed_file_out_.open(folderNameA + "\\uncompressed.dat",
+                                std::ifstream::binary);
+
+    bool is_ok = uncompressed_file_out_.good();
+    (void)is_ok;
   }
 
   //-----------------------------------------------------------------------------
@@ -1699,6 +1742,21 @@ class VideoCapturer::I420BufferPool {
     VideoFrame captureFrame(buffer, 0, rtc::TimeMillis(),
       !apply_rotation ? rotateFrame_ : kVideoRotation_0);
     captureFrame.set_ntp_time_ms(captureTime);
+
+    LONGLONG timestampHns;
+
+    spMediaSample->GetSampleTime(&timestampHns);
+    LONGLONG durationHns;
+
+    spMediaSample->GetSampleDuration(&durationHns);
+
+    DWORD totalSize =
+        target_width * target_height + target_width * target_height / 2;
+    assert(totalSize == videoFrameLength);
+    uncompressed_file_out_.write((char*)&timestampHns, sizeof(timestampHns));
+    uncompressed_file_out_.write((char*)&durationHns, sizeof(durationHns));
+    uncompressed_file_out_.write((char*)&totalSize, sizeof(totalSize));
+    uncompressed_file_out_.write((char*)videoFrame, totalSize);
 
     forwardToDelegates(frameInfo, spMediaSample, buffer);
     OnFrame(captureFrame, captureFrame.width(), captureFrame.height());

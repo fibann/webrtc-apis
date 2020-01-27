@@ -21,6 +21,7 @@
 #include <functional>
 #include <vector>
 #include <queue>
+#include <fstream>
 
 #include "impl_webrtc_VideoCaptureMediaSink.h"
 
@@ -151,6 +152,7 @@ namespace webrtc
     bool mrc_recording_indicator_enabled_{true};
 
     class I420BufferPool;
+    std::ofstream uncompressed_file_out_;
     const std::unique_ptr<I420BufferPool> pool_;
   };
 }
